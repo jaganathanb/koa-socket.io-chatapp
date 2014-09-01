@@ -1,26 +1,55 @@
-var http = require('http'),
-    koa = require('koa'),
-    logger = require('koa-logger'),
-    route = require('koa-route'),
-    path = require('path'),
-    serve = require('koa-static');
+var hapi = require('hapi'),
+	path = require('path');
 
-// Create koa app
-var app = koa();
+	var serverOptions = {
+    views: {
+        engines: {
+            html: require('swig')
+        },
+        path: path.join(__dirname, 'views')
+    }
+};
 
-var routes = require('./routes/route')();
+var server = new hapi.Server('localhost', 3000, serverOptions);
 
-// middleware
-app.use(logger());
-app.use(serve(path.join(__dirname , '/public')));
-app.use(route.get('/', routes.index));
+// serving static files
+server.route({
+    method: 'GET',
+    path: '/{param*}',
+    handler: {
+        directory: {
+            path: 'public',
+            listing: false
+        }
+    }
+});
 
+server.route({
+    method: 'GET',
+    path: '/',
+    handler: function (req, reply) {
+    	reply.view('index');
+    }
+});
 
-var server = http.Server(app.callback());
+var options = {
+    subscribers: {
+        'console': ['ops', 'request', 'log', 'error'],
+        'http://localhost/logs': ['log']
+    }
+};
 
-//enable chat service
-require('./lib/chat')(server);
+server.pack.register({
+    plugin: require('good'),
+    options: options
+}, function (err) {
+   if (err) {
+      console.log(err);
+      return;
+   }
+});
 
-server.listen('1234', function (argument) {
-	console.log('Server started at 1234...');
-})
+server.start(function () {
+	require('./lib/chat')(server.listener);
+    console.log('Server started at: ' + server.info.uri);
+});
